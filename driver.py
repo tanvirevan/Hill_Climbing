@@ -1,11 +1,12 @@
 import math
+import random
+import csv
 
 engine_file = "engines.txt"
 tire_file = "tires.txt"
 transmission_file = "transmissions.txt"
 valid_cars_file = "valid_book.csv"
-import random
-import csv
+
 valid_cars = set()
 class Car:
     def __init__(self, engine, tire, transmission, roof):
@@ -17,7 +18,8 @@ class Car:
     def __eq__(self, car):
         return car.engine == self.engine and car.tire == self.tire and car.transmission == self.transmission and car.roof == self.roof
 
-
+    def __hash__(self):
+        return hash((self.engine, self.tire, self.transmission, self.roof))
 
 def load_cars(filename):
     with open(filename, 'r') as file:
@@ -34,8 +36,8 @@ def content_reader(filename):
         container = [line.rstrip() for line in file]
         return container
 
-# compare with the target
-# car2 -> target
+
+
 def compare_with_target(car1, car2):
     num_mismatched = 0
     if car1.transmission != car2.transmission:
@@ -51,56 +53,76 @@ def compare_with_target(car1, car2):
 def delta_e(parent_car, child_car, target):
     return compare_with_target(parent_car, target) - compare_with_target(child_car, target)
 
-def get_e(delta_e, level):
+def get_probability(delta_e, level):
     return math.e ** (delta_e / level)
+
+def hill_climbing_with_simulated_annealing(start_car, goal_car, engines,transmissions,tires, roofs, valid_cars):
+    current_car = start_car
+    level = 0
+    states = []
+    while current_car != goal_car:
+        delta_values = []
+
+        if current_car.engine != goal_car.engine:
+            level +=1
+            for engine in engines:
+                candidate_car = Car(engine, current_car.tire, current_car.transmission, current_car.roof)
+                if candidate_car in valid_cars:
+                    delta = delta_e(current_car, candidate_car, goal_car)
+                    delta_values.append((candidate_car, delta))
+
+        if current_car.transmission != goal_car.transmission:
+            level += 1
+            for transmission in transmissions:
+                candidate_car = Car(transmission,current_car.engine,current_car.tire,current_car.roof)
+                if candidate_car in valid_cars:
+                    delta = delta_e(current_car,candidate_car,goal_car)
+                    delta_values.append((candidate_car,delta))
+
+        if current_car.tire != goal_car.tire:
+            level += 1
+            for tire in tires:
+                candidate_car = Car(tire,current_car.engine,current_car.transmission,current_car.roof)
+                if candidate_car in valid_cars:
+                    delta = delta_e(current_car,candidate_car,goal_car)
+                    delta_values.append((candidate_car,delta))
+
+        if current_car.roof != goal_car.roof:
+            level += 1
+            for roof in roofs:
+                candidate_car = Car(roof,current_car.engine, current_car.tire, current_car.transmission)
+                if candidate_car in valid_cars:
+                    delta = delta_e(current_car,candidate_car,goal_car)
+                    delta_values.append((candidate_car,delta))
+
+        if not delta_values:
+            print("No valid candidates at level:", level)
+            break
+
+        delta_values.sort(key=lambda x: x[1], reverse=True)
+
+
+        if delta_values[0][1] <= 0:
+            probability = get_probability(delta_values[0][1], 1 / level)
+            if random.uniform(0, 1) > probability:
+                break
+        
+        current_car = goal_car
+
+    return goal_car, level
+
 
 
 engines = content_reader(engine_file)
-transmission = content_reader(transmission_file)
+transmissions = content_reader(transmission_file)
 tires = content_reader(tire_file)
 roofs = ["Sunroof", "Moonroof", "Noroof"]
 
-start_car = Car("EFI","Danlop", "AT", "Noroof")
+start_car = Car("EFI", "Danlop", "AT", "Noroof")
+goal_car = Car("V12", "Pirelli", "CVT", "Noroof")
 
-goal_car = Car("V12", "Pirelli", "CVT", "Sunroof")
+load_cars(valid_cars_file)
 
-from collections import deque
-frontier = deque()
-level = -1
-seen = set()
-seen.add(start_car)
-frontier.append(start_car)
-goal_reached = False
-while frontier:
-    level += 1
-    # explore the current level
-    while frontier:
-        current_car = frontier.popleft()
-        current_engine = current_car.engine
-        current_tire = current_car.tire
-        current_transmission = current_car.transmission
-        current_roof = current_car.roof
-        children = deque()
-        for engine in engines:
-            candidate_car = Car(engine, current_tire, current_transmission, current_roof)
-            if candidate_car not in seen and candidate_car in valid_cars:
-                if candidate_car == goal_car:
-                    print(level + 1)
-                    goal_reached = True
-                    break
-                # check if this candidate_car is worthy: calculate delta E
-                # if delta E > 0 just pick the child
-                # if delta E <= 0 pick the child with some probability
-                # random.uniform(0, 1) <=  get_e(delta_e, 1 / level)
-                children.append(candidate_car)
-                seen.add(candidate_car)
-        # one for transmission
-        # one for tire
-        # one for roof
-        if goal_reached:
-            break
-        
-    if goal_reached:
-        break
-
-print(level + 1)
+best_state, years = hill_climbing_with_simulated_annealing(start_car, goal_car, engines, transmissions, tires, roofs, valid_cars)
+print("Best state:", best_state.engine,",",best_state.tire,",",best_state.transmission,",",best_state.roof)
+print("Minimum number of years:", years)
